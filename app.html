@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geolocation-Tracker mit Karte</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        #coordinates {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Geolocation-Tracker mit Karte</h1>
+    <div id="map"></div>
+    <div id="coordinates">Warte auf Standort...</div>
+    
+    <script>
+        let map = L.map('map').setView([51.1657, 10.4515], 6); // Standardposition (Deutschland)
+        let marker;
+        let coordinatesDiv = document.getElementById('coordinates');
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+        
+        function updateLocation() {
+            if (!navigator.geolocation) {
+                alert("Geolocation wird nicht unterstützt.");
+                return;
+            }
+            
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    
+                    if (!marker) {
+                        marker = L.marker([latitude, longitude]).addTo(map);
+                    } else {
+                        marker.setLatLng([latitude, longitude]);
+                    }
+                    
+                    map.setView([latitude, longitude], 15);
+                    coordinatesDiv.innerHTML = `Breitengrad: ${latitude.toFixed(6)}<br>Längengrad: ${longitude.toFixed(6)}<br>Genauigkeit: ±${accuracy} m`;
+                },
+                (error) => {
+                    alert("Fehler beim Abrufen des Standorts: " + error.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+        
+        updateLocation();
+    </script>
+</body>
+</html>
