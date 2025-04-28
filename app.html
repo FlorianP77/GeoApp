@@ -20,7 +20,7 @@
             margin-top: 20px;
             border-radius: 5px;
         }
-        #coordinates {
+        #coordinates, #explored-area {
             margin-top: 10px;
             padding: 10px;
             background-color: #fff;
@@ -34,18 +34,58 @@
     <h1>Geolocation-Tracker mit Karte</h1>
     <div id="map"></div>
     <div id="coordinates">Warte auf Standort...</div>
+    <div id="explored-area">Erkundetes Gebiet: 0.000000% (Erde), 0.000000% (Schweiz)</div>
     
     <script>
-        let map = L.map('map').setView([51.1657, 10.4515], 6); // Standardposition (Deutschland)
+        let map = L.map('map').setView([51.1657, 10.4515], 6);
         let marker;
         let lastCircle;
         let coordinatesDiv = document.getElementById('coordinates');
-        let trackLayer = L.layerGroup().addTo(map); // Layer für die Spur
+        let exploredAreaDiv = document.getElementById('explored-area');
+        let trackLayer = L.layerGroup().addTo(map);
         
+        let circleRadius = 5000; // Radius in Metern
+        let exploredArea = 0; // Tatsächlich erkundete Fläche in km²
+        const EARTH_LAND_AREA_KM2 = 148900000; // Landfläche der Erde in km²
+        const SWITZERLAND_AREA_KM2 = 41290; // Fläche der Schweiz in km²
+        let previousCircles = []; // Speichert alle bisherigen Kreise
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
-        
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Erdradius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distanz in km
+        }
+
+        function calculateNewExploredArea(lat, lon) {
+            let newCircleArea = Math.PI * Math.pow(circleRadius / 1000, 2); // Fläche des neuen Kreises in km²
+            let overlapArea = 0;
+
+            for (let prev of previousCircles) {
+                let dist = getDistance(lat, lon, prev.lat, prev.lon);
+                let r = circleRadius / 1000; // Radius in km
+                if (dist < r * 2) {
+                    // Teilweise Überlappung oder vollständige Abdeckung
+                    let d = dist;
+                    if (d >= r * 2) continue; // Kein Überlappen
+                    
+                    let intersectionArea = 2 * Math.acos(d / (2 * r)) * r * r - (d / 2) * Math.sqrt(4 * r * r - d * d);
+                    overlapArea += intersectionArea;
+                }
+            }
+
+            let actualNewArea = Math.max(newCircleArea - overlapArea, 0);
+            exploredArea += actualNewArea;
+        }
+
         function updateLocation() {
             if (!navigator.geolocation) {
                 alert("Geolocation wird nicht unterstützt.");
@@ -56,17 +96,14 @@
                 (position) => {
                     const { latitude, longitude, accuracy } = position.coords;
                     
-                    // Karten-Zoom beibehalten
                     let currentZoom = map.getZoom();
                     
-                    // Marker für aktuellen Standort
                     if (!marker) {
                         marker = L.marker([latitude, longitude]).addTo(map);
                     } else {
                         marker.setLatLng([latitude, longitude]);
                     }
 
-                    // Roten Kreis für aktuellen Standort setzen
                     if (lastCircle) {
                         lastCircle.setStyle({ color: 'blue', fillColor: '#03f', fillOpacity: 0.3 });
                     }
@@ -75,14 +112,23 @@
                         color: 'red',
                         fillColor: '#f03',
                         fillOpacity: 0.3,
-                        radius: 100
+                        radius: circleRadius
                     }).addTo(trackLayer);
                     
-                    // Neue Ansicht ohne Zoom-Änderung setzen
                     map.setView([latitude, longitude], currentZoom);
 
-                    // Koordinaten anzeigen
+                    // Berechne nur das wirklich neu erkundete Gebiet
+                    calculateNewExploredArea(latitude, longitude);
+
+                    // Prozentualen Anteil berechnen
+                    let exploredEarthPercentage = (exploredArea / EARTH_LAND_AREA_KM2) * 100;
+                    let exploredSwitzerlandPercentage = (exploredArea / SWITZERLAND_AREA_KM2) * 100;
+
                     coordinatesDiv.innerHTML = `Breitengrad: ${latitude.toFixed(6)}<br>Längengrad: ${longitude.toFixed(6)}<br>Genauigkeit: ±${accuracy} m`;
+                    exploredAreaDiv.innerHTML = `Erkundetes Gebiet: ${exploredEarthPercentage.toFixed(6)}% (Erde), ${exploredSwitzerlandPercentage.toFixed(6)}% (Schweiz)`;
+
+                    // Speichere den neuen Kreis
+                    previousCircles.push({ lat: latitude, lon: longitude });
                 },
                 (error) => {
                     alert("Fehler beim Abrufen des Standorts: " + error.message);
@@ -91,11 +137,8 @@
             );
         }
 
-        // Erstmaliges Laden des Standorts
         updateLocation();
-        
-        // Alle 30 Sekunden den Standort aktualisieren
-        setInterval(updateLocation, 10000);
+        setInterval(updateLocation, 30000);
     </script>
 </body>
 </html>
